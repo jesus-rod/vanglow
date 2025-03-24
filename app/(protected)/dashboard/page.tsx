@@ -1,14 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, Row, Col, Statistic, Typography, Button } from 'antd';
 import { useSession } from 'next-auth/react';
 import { usePermission } from '@/lib/auth/permissions';
 import Link from 'next/link';
-import { ArrowRightOutlined } from '@ant-design/icons';
 import { getRequest } from '@/lib/apiClient';
-
-const { Title, Text } = Typography;
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { ArrowRight, Building2, Users, UserCheck } from 'lucide-react';
 
 interface DashboardStats {
   totalOrganizations: number;
@@ -44,45 +43,68 @@ export default function Dashboard() {
 
   return (
     <div className="flex items-center justify-center p-4 h-full">
-      <Card className="w-full text-center">
-        <Title level={2}>Welcome to Vanglow</Title>
-        <Text className="block mb-8 text-lg">A modern and scalable system for your business</Text>
+      <Card className="w-full">
+        <CardHeader className="text-center">
+          <CardTitle className="text-3xl">Welcome to Vanglow</CardTitle>
+          <p className="text-lg text-muted-foreground">
+            A modern and scalable system for your business
+          </p>
+        </CardHeader>
+        <CardContent>
+          {session ? (
+            <div className="space-y-8">
+              <div className="flex justify-center">
+                <Link href="/administrations">
+                  <Button size="lg">
+                    Go to Administrations
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Button>
+                </Link>
+              </div>
 
-        {session ? (
-          <div>
-            <Link href="/administrations">
-              <Button type="primary" size="large" icon={<ArrowRightOutlined />}>
-                Go to Administrations
-              </Button>
-            </Link>
-
-            {canViewStats && (
-              <Row gutter={16} className="mb-8 mt-8">
-                <Col span={8}>
+              {canViewStats && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <Card>
-                    <Statistic title="Total Organizations" value={stats.totalOrganizations} />
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">Total Organizations</CardTitle>
+                      <Building2 className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">{stats.totalOrganizations}</div>
+                    </CardContent>
                   </Card>
-                </Col>
-                <Col span={8}>
                   <Card>
-                    <Statistic title="Total Users" value={stats.totalUsers} />
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">Total Users</CardTitle>
+                      <Users className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">{stats.totalUsers}</div>
+                    </CardContent>
                   </Card>
-                </Col>
-                <Col span={8}>
                   <Card>
-                    <Statistic title="Active Users" value={stats.activeUsers} />
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">Active Users</CardTitle>
+                      <UserCheck className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">{stats.activeUsers}</div>
+                    </CardContent>
                   </Card>
-                </Col>
-              </Row>
-            )}
-          </div>
-        ) : (
-          <Link href="/auth/signin">
-            <Button type="primary" size="large" icon={<ArrowRightOutlined />}>
-              Sign In
-            </Button>
-          </Link>
-        )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex justify-center">
+              <Link href="/auth/signin">
+                <Button size="lg">
+                  Sign In
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </Link>
+            </div>
+          )}
+        </CardContent>
       </Card>
     </div>
   );

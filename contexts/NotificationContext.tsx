@@ -2,7 +2,7 @@
 
 import { createContext, useContext } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { ShowNotificationFunction } from '@/lib/apiClient/types/types';
+import { ShowNotificationFunction, NotificationType } from '@/lib/apiClient/types/types';
 
 interface NotificationContextType {
   showNotification: ShowNotificationFunction;
@@ -13,11 +13,11 @@ const NotificationContext = createContext<NotificationContextType | undefined>(u
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const { toast } = useToast();
 
-  const showNotification: ShowNotificationFunction = ({
-    type = 'default',
-    message,
-    description,
-  }) => {
+  const showNotification: ShowNotificationFunction = (
+    type: NotificationType,
+    message: string,
+    description?: string
+  ) => {
     toast({
       variant: type === 'error' ? 'destructive' : 'default',
       title: message,

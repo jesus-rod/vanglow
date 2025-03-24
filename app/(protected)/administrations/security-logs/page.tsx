@@ -1,12 +1,19 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Card, Typography, Table } from 'antd';
-import type { ColumnsType } from 'antd/es/table';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
 import { getRequest } from '@/lib/apiClient';
 import { usePermission } from '@/lib/auth/permissions';
-
-const { Title } = Typography;
+import { format } from 'date-fns';
 
 interface SecurityLog {
   id: string;
@@ -23,102 +30,139 @@ interface SecurityLog {
   };
 }
 
+interface SecurityLogsResponse {
+  data: SecurityLog[];
+  total: number;
+}
+
 export default function SecurityLogsPage() {
   const [logs, setLogs] = useState<SecurityLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [total, setTotal] = useState(0);
+  const [error, setError] = useState<string | null>(null);
   const canViewLogs = usePermission('security_log', 'view');
 
   useEffect(() => {
     if (canViewLogs) {
       fetchLogs();
     }
-  }, [canViewLogs]);
+  }, [canViewLogs, currentPage, pageSize]);
 
   const fetchLogs = async () => {
+    setLoading(true);
+    setError(null);
     try {
-      const data = await getRequest<SecurityLog[]>('/administrations/security-logs');
-      setLogs(data);
+      const response = await getRequest<SecurityLogsResponse>(
+        `/administrations/security-logs?page=${currentPage}&pageSize=${pageSize}`
+      );
+      console.log('Security logs response:', response);
+      if (response && Array.isArray(response)) {
+        setLogs(response);
+        setTotal(response.length);
+      } else if (response && 'data' in response) {
+        setLogs(response.data);
+        setTotal(response.total);
+      } else {
+        setError('Invalid response format from server');
+        console.error('Unexpected response format:', response);
+      }
     } catch (error) {
       console.error('Failed to fetch security logs:', error);
+      setError('Failed to fetch security logs');
+      setLogs([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const columns: ColumnsType<SecurityLog> = [
-    {
-      title: 'Date',
-      dataIndex: 'createdAt',
-      key: 'createdAt',
-      render: (date: string) => new Date(date).toLocaleString(),
-      width: 180,
-    },
-    {
-      title: 'Type',
-      dataIndex: 'type',
-      key: 'type',
-      width: 120,
-    },
-    {
-      title: 'Status',
-      dataIndex: 'status',
-      key: 'status',
-      width: 100,
-      render: (status: string) => (
-        <span style={{ color: status === 'SUCCESS' ? '#52c41a' : '#ff4d4f' }}>{status}</span>
-      ),
-    },
-    {
-      title: 'Email',
-      dataIndex: 'email',
-      key: 'email',
-      width: 200,
-    },
-    {
-      title: 'User',
-      key: 'user',
-      width: 150,
-      render: (record: SecurityLog) =>
-        record.user ? `${record.user.firstName} ${record.user.lastName}` : '-',
-    },
-    {
-      title: 'IP Address',
-      dataIndex: 'ipAddress',
-      key: 'ipAddress',
-      width: 130,
-    },
-    {
-      title: 'Browser',
-      dataIndex: 'userAgent',
-      key: 'userAgent',
-      ellipsis: true,
-    },
-    {
-      title: 'Message',
-      dataIndex: 'message',
-      key: 'message',
-      ellipsis: true,
-    },
-  ];
+  const getStatusBadgeVariant = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'success':
+        return 'default';
+      case 'failed':
+        return 'destructive';
+      default:
+        return 'secondary';
+    }
+  };
 
   if (!canViewLogs) {
     return null;
   }
 
+  const renderTableContent = () => {
+    if (loading) {
+      return (
+        <TableRow>
+          <TableCell colSpan={6} className="text-center py-8">
+            Loading...
+          </TableCell>
+        </TableRow>
+      );
+    }
+
+    if (error) {
+      return (
+        <TableRow>
+          <TableCell colSpan={6} className="text-center py-8 text-destructive">
+            {error}
+          </TableCell>
+        </TableRow>
+      );
+    }
+
+    if (!logs || logs.length === 0) {
+      return (
+        <TableRow>
+          <TableCell colSpan={6} className="text-center py-8">
+            No security logs found
+          </TableCell>
+        </TableRow>
+      );
+    }
+
+    return logs.map((log) => (
+      <TableRow key={log.id}>
+        <TableCell className="font-medium">{format(new Date(log.createdAt), 'PPpp')}</TableCell>
+        <TableCell>
+          {log.user ? `${log.user.firstName} ${log.user.lastName}` : log.email || 'Unknown'}
+        </TableCell>
+        <TableCell>
+          <Badge variant="outline">{log.type}</Badge>
+        </TableCell>
+        <TableCell>
+          <Badge variant={getStatusBadgeVariant(log.status)}>{log.status}</Badge>
+        </TableCell>
+        <TableCell>{log.ipAddress}</TableCell>
+        <TableCell className="max-w-md truncate">{log.message}</TableCell>
+      </TableRow>
+    ));
+  };
+
   return (
     <Card>
-      <Title level={2}>Security Logs</Title>
-      <Table
-        columns={columns}
-        dataSource={logs}
-        loading={loading}
-        rowKey="id"
-        pagination={{
-          defaultPageSize: 20,
-          showSizeChanger: true,
-          showTotal: (total) => `Total ${total} records`,
-        }}
-      />
+      <CardHeader>
+        <CardTitle>Security Logs</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>User</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>IP Address</TableHead>
+                <TableHead>Message</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>{renderTableContent()}</TableBody>
+          </Table>
+        </div>
+      </CardContent>
     </Card>
   );
 }

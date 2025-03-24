@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Menu, Moon, Sun, User, LogOut } from 'lucide-react';
 import { useSession, signOut } from 'next-auth/react';
-import { useTheme } from '@/app/providers';
+import { useTheme } from 'next-themes';
 
 interface NavbarProps {
   collapsed: boolean;
