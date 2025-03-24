@@ -35,9 +35,7 @@ export default function Sidebar({ collapsed }: SidebarProps) {
     >
       {collapsed === false ? (
         <div style={{ height: 32, margin: 16 }}>
-          <h1 style={{ fontSize: '18px', color: token.colorText, textAlign: 'center' }}>
-            NextJS Starter
-          </h1>
+          <h1 style={{ fontSize: '18px', color: token.colorText, textAlign: 'center' }}>Vanglow</h1>
         </div>
       ) : (
         <div style={{ height: 32, margin: 16 }}>

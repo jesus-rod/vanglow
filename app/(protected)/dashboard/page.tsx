@@ -45,7 +45,7 @@ export default function Dashboard() {
   return (
     <div className="flex items-center justify-center p-4 h-full">
       <Card className="w-full text-center">
-        <Title level={2}>Welcome to NextJS Starter Template</Title>
+        <Title level={2}>Welcome to Vanglow</Title>
         <Text className="block mb-8 text-lg">A modern and scalable system for your business</Text>
 
         {session ? (

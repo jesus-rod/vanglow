@@ -1,4 +1,4 @@
-# NextJS Starter
+# Vanglow
 
 A modern and scalable system. Developed with Next.js 15, TypeScript, Prisma, and Ant Design.
 
