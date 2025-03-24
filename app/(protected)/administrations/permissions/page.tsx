@@ -280,12 +280,12 @@ export default function PermissionsPage() {
       },
     },
     {
-      accessorKey: 'actions',
-      header: 'Actions',
+      accessorKey: 'availableActions',
+      header: 'Available Actions',
       cell: ({ row }) => (
         <div className="flex gap-1">
           {row.original.actions.map((action) => (
-            <Badge key={action.action.id} variant="outline">
+            <Badge key={`${row.original.resource.id}-${action.action.id}`} variant="outline">
               {action.action.name}
             </Badge>
           ))}
