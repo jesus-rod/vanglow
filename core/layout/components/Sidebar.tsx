@@ -1,48 +1,59 @@
 'use client';
 
-import { Layout, Menu, theme } from 'antd';
-import { DashboardOutlined, TeamOutlined, SettingOutlined } from '@ant-design/icons';
 import Link from 'next/link';
-
-const { Sider } = Layout;
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { LayoutDashboard, Settings } from 'lucide-react';
 
 interface SidebarProps {
   collapsed: boolean;
 }
 
 export default function Sidebar({ collapsed }: SidebarProps) {
-  const { token } = theme.useToken();
-
   const menuItems = [
     {
-      key: '/dashboard',
-      icon: <DashboardOutlined />,
-      label: <Link href="/dashboard">Dashboard</Link>,
+      href: '/dashboard',
+      icon: LayoutDashboard,
+      label: 'Dashboard',
     },
     {
-      key: '/administrations',
-      icon: <SettingOutlined />,
-      label: <Link href="/administrations">Administrations</Link>,
+      href: '/administrations',
+      icon: Settings,
+      label: 'Administrations',
     },
   ];
 
   return (
-    <Sider
-      trigger={null}
-      collapsible
-      collapsed={collapsed}
-      style={{ background: token.colorBgContainer, borderRadius: '8px' }}
-    >
-      {collapsed === false ? (
-        <div style={{ height: 32, margin: 16 }}>
-          <h1 style={{ fontSize: '18px', color: token.colorText, textAlign: 'center' }}>Vanglow</h1>
-        </div>
-      ) : (
-        <div style={{ height: 32, margin: 16 }}>
-          <h1 style={{ fontSize: '18px', color: token.colorText, textAlign: 'center' }}>NEXT</h1>
-        </div>
+    <div
+      className={cn(
+        'fixed left-0 top-0 z-40 h-screen bg-background border-r transition-all duration-300',
+        collapsed ? 'w-16' : 'w-64'
       )}
-      <Menu mode="inline" items={menuItems} style={{ background: token.colorBgContainer }} />
-    </Sider>
+    >
+      <div className="flex h-16 items-center justify-center border-b">
+        <h1
+          className={cn(
+            'font-semibold transition-all duration-300',
+            collapsed ? 'text-lg' : 'text-xl'
+          )}
+        >
+          {collapsed ? 'V' : 'Vanglow'}
+        </h1>
+      </div>
+
+      <nav className="space-y-1 p-2">
+        {menuItems.map((item) => (
+          <Link key={item.href} href={item.href}>
+            <Button
+              variant="ghost"
+              className={cn('w-full justify-start', collapsed ? 'px-2' : 'px-4')}
+            >
+              <item.icon className="h-5 w-5" />
+              {!collapsed && <span className="ml-2">{item.label}</span>}
+            </Button>
+          </Link>
+        ))}
+      </nav>
+    </div>
   );
 }

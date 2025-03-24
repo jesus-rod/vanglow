@@ -1,26 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import {
-  Card,
-  Button,
-  Typography,
-  Tabs,
-  TabsProps,
-  Drawer,
-  Modal,
-  Dropdown,
-  MenuProps,
-} from 'antd';
-import {
-  PlusOutlined,
-  SafetyCertificateOutlined,
-  AppstoreOutlined,
-  ThunderboltOutlined,
-  EditOutlined,
-  DeleteOutlined,
-  MoreOutlined,
-} from '@ant-design/icons';
 import { usePermission } from '@/lib/auth/permissions';
 import { DataGrid } from '@/core/components/datagrid';
 import { Permission, Resource, Action } from '@prisma/client';
@@ -28,10 +8,30 @@ import { PermissionForm } from './components/permission-form';
 import { ResourceForm } from './components/resource-form';
 import { ActionForm } from './components/action-form';
 import { getRequest, postRequest, putRequest, deleteRequest } from '@/lib/apiClient';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { MoreHorizontal, Plus, Pencil, Trash, Shield, Database, Zap } from 'lucide-react';
+import { ColumnDef } from '@tanstack/react-table';
 
-const { Title } = Typography;
-
-// Types with relations
 interface PermissionWithRelations extends Permission {
   resource: Resource;
   actions: {
@@ -55,58 +55,33 @@ interface PermissionWithRelations extends Permission {
 }
 
 interface ResourceWithCount extends Resource {
-  _count: {
+  _count?: {
     permissions: number;
   };
 }
 
 interface ActionWithCount extends Action {
-  _count: {
+  _count?: {
     permissions: number;
   };
 }
 
 export default function PermissionsPage() {
-  // States for each tab
-  const [permissions, setPermissions] = useState<PermissionWithRelations[]>([]);
-  const [resources, setResources] = useState<Resource[]>([]);
-  const [actions, setActions] = useState<Action[]>([]);
-  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('permissions');
-
-  // Form states
-  const [permissionDrawerVisible, setPermissionDrawerVisible] = useState(false);
-  const [resourceDrawerVisible, setResourceDrawerVisible] = useState(false);
-  const [actionDrawerVisible, setActionDrawerVisible] = useState(false);
-  const [selectedPermission, setSelectedPermission] = useState<PermissionWithRelations | null>(
-    null
-  );
-  const [selectedResource, setSelectedResource] = useState<Resource | null>(null);
-  const [selectedAction, setSelectedAction] = useState<Action | null>(null);
+  const [permissions, setPermissions] = useState<PermissionWithRelations[]>([]);
+  const [resources, setResources] = useState<ResourceWithCount[]>([]);
+  const [actions, setActions] = useState<ActionWithCount[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [drawerVisible, setDrawerVisible] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<any>(null);
   const [formLoading, setFormLoading] = useState(false);
-
-  // Delete modal states
-  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
-  const [itemToDelete, setItemToDelete] = useState<{
-    type: 'permission' | 'resource' | 'action';
-    id: string;
-  } | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<any>(null);
 
   // Permission hooks
-  const canViewPermissions = usePermission('permission', 'view');
-  const canCreatePermission = usePermission('permission', 'create');
-  const canEditPermission = usePermission('permission', 'edit');
-  const canDeletePermission = usePermission('permission', 'delete');
-
-  const canViewResources = usePermission('resource', 'view');
-  const canCreateResource = usePermission('resource', 'create');
-  const canEditResource = usePermission('resource', 'edit');
-  const canDeleteResource = usePermission('resource', 'delete');
-
-  const canViewActions = usePermission('action', 'view');
-  const canCreateAction = usePermission('action', 'create');
-  const canEditAction = usePermission('action', 'edit');
-  const canDeleteAction = usePermission('action', 'delete');
+  const canCreate = usePermission('permission', 'create');
+  const canEdit = usePermission('permission', 'edit');
+  const canDelete = usePermission('permission', 'delete');
 
   useEffect(() => {
     fetchData();
@@ -115,15 +90,19 @@ export default function PermissionsPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      if (activeTab === 'permissions') {
-        const data = await getRequest<PermissionWithRelations[]>('/administrations/permissions');
-        setPermissions(data);
-      } else if (activeTab === 'resources') {
-        const data = await getRequest<Resource[]>('/administrations/resources');
-        setResources(data);
-      } else if (activeTab === 'actions') {
-        const data = await getRequest<Action[]>('/administrations/actions');
-        setActions(data);
+      switch (activeTab) {
+        case 'permissions':
+          const perms = await getRequest<PermissionWithRelations[]>('/administrations/permissions');
+          setPermissions(perms);
+          break;
+        case 'resources':
+          const resources = await getRequest<ResourceWithCount[]>('/administrations/resources');
+          setResources(resources);
+          break;
+        case 'actions':
+          const actions = await getRequest<ActionWithCount[]>('/administrations/actions');
+          setActions(actions);
+          break;
       }
     } catch (error) {
       console.error(error);
@@ -132,32 +111,13 @@ export default function PermissionsPage() {
     }
   };
 
-  const handleSubmit = async (values: any) => {
+  const handleDelete = async () => {
+    if (!itemToDelete) return;
     setFormLoading(true);
     try {
-      let endpoint = '';
-
-      if (activeTab === 'permissions') {
-        endpoint = selectedPermission
-          ? `/administrations/permissions/${selectedPermission.id}`
-          : '/administrations/permissions';
-      } else if (activeTab === 'resources') {
-        endpoint = selectedResource
-          ? `/administrations/resources/${selectedResource.id}`
-          : '/administrations/resources';
-      } else if (activeTab === 'actions') {
-        endpoint = selectedAction
-          ? `/administrations/actions/${selectedAction.id}`
-          : '/administrations/actions';
-      }
-
-      if (selectedPermission || selectedResource || selectedAction) {
-        await putRequest(endpoint, values);
-      } else {
-        await postRequest(endpoint, values);
-      }
-
-      closeDrawers();
+      await deleteRequest(`/administrations/${activeTab}/${itemToDelete.id}`);
+      setDeleteDialogOpen(false);
+      setItemToDelete(null);
       fetchData();
     } catch (error) {
       console.error(error);
@@ -166,344 +126,207 @@ export default function PermissionsPage() {
     }
   };
 
-  const handleDelete = async () => {
-    if (!itemToDelete) return;
-
+  const handleSubmit = async (values: any) => {
+    setFormLoading(true);
     try {
-      await deleteRequest(`/administrations/${itemToDelete.type}s/${itemToDelete.id}`);
-      setDeleteModalVisible(false);
-      setItemToDelete(null);
+      if (selectedItem) {
+        await putRequest(`/administrations/${activeTab}/${selectedItem.id}`, values);
+      } else {
+        await postRequest(`/administrations/${activeTab}`, values);
+      }
+      setDrawerVisible(false);
+      setSelectedItem(null);
       fetchData();
     } catch (error) {
       console.error(error);
+    } finally {
+      setFormLoading(false);
     }
   };
 
-  const closeDrawers = () => {
-    setPermissionDrawerVisible(false);
-    setResourceDrawerVisible(false);
-    setActionDrawerVisible(false);
-    setSelectedPermission(null);
-    setSelectedResource(null);
-    setSelectedAction(null);
-  };
-
-  // Permission columns
-  const permissionColumns = [
+  const resourceColumns: ColumnDef<ResourceWithCount>[] = [
     {
-      title: 'Actions',
-      key: 'actions',
-      width: 100,
-      render: (record: PermissionWithRelations) => {
-        const menuItems: MenuProps['items'] = [];
-
-        if (canEditPermission) {
-          menuItems.push({
-            key: 'edit',
-            label: 'Edit',
-            icon: <EditOutlined />,
-            onClick: () => {
-              setSelectedPermission(record);
-              setPermissionDrawerVisible(true);
-            },
-          });
-        }
-
-        if (canDeletePermission) {
-          menuItems.push({
-            key: 'delete',
-            label: 'Delete',
-            icon: <DeleteOutlined />,
-            danger: true,
-            onClick: () => {
-              setItemToDelete({ type: 'permission', id: record.id });
-              setDeleteModalVisible(true);
-            },
-          });
-        }
-
-        return (
-          <Dropdown menu={{ items: menuItems }} trigger={['click']} placement="bottomRight">
-            <Button type="text" icon={<MoreOutlined />} />
-          </Dropdown>
-        );
-      },
+      accessorKey: 'name',
+      header: 'Name',
     },
     {
-      title: 'Resource',
-      key: 'resource',
-      render: (record: PermissionWithRelations) => record.resource.name,
+      accessorKey: 'slug',
+      header: 'Slug',
     },
     {
-      title: 'Target Type',
-      dataIndex: 'target',
-      key: 'target',
+      accessorKey: 'description',
+      header: 'Description',
     },
     {
-      title: 'Target',
-      key: 'targetName',
-      render: (record: PermissionWithRelations) => {
-        if (record.user) {
-          return `${record.user.firstName} ${record.user.lastName} (${record.user.email})`;
-        }
-        if (record.role) {
-          return `${record.role.name}${record.role.organizationId ? ' (Organization Role)' : ' (Global Role)'}`;
-        }
-        if (record.organization) {
-          return record.organization.name;
-        }
-        return '-';
-      },
+      accessorKey: '_count.permissions',
+      header: 'Permissions',
+      cell: ({ row }) => <Badge variant="outline">{row.original._count?.permissions || 0}</Badge>,
     },
     {
-      title: 'Actions',
-      key: 'actions',
-      render: (record: PermissionWithRelations) =>
-        record.actions.map((pa) => pa.action.name).join(', '),
+      id: 'actions',
+      cell: ({ row }) => (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" className="h-8 w-8 p-0">
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {canEdit && (
+              <DropdownMenuItem
+                onClick={() => {
+                  setSelectedItem(row.original);
+                  setDrawerVisible(true);
+                }}
+              >
+                <Pencil className="mr-2 h-4 w-4" />
+                Edit
+              </DropdownMenuItem>
+            )}
+            {canDelete && row.original._count?.permissions === 0 && (
+              <DropdownMenuItem
+                className="text-destructive"
+                onClick={() => {
+                  setItemToDelete(row.original);
+                  setDeleteDialogOpen(true);
+                }}
+              >
+                <Trash className="mr-2 h-4 w-4" />
+                Delete
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ),
     },
   ];
 
-  // Resource columns
-  const resourceColumns = [
+  const actionColumns: ColumnDef<ActionWithCount>[] = [
     {
-      title: 'Actions',
-      key: 'actions',
-      width: 100,
-      render: (record: Resource) => {
-        const menuItems: MenuProps['items'] = [];
-
-        if (canEditResource) {
-          menuItems.push({
-            key: 'edit',
-            label: 'Edit',
-            icon: <EditOutlined />,
-            onClick: () => {
-              setSelectedResource(record);
-              setResourceDrawerVisible(true);
-            },
-          });
-        }
-
-        if (canDeleteResource) {
-          menuItems.push({
-            key: 'delete',
-            label: 'Delete',
-            icon: <DeleteOutlined />,
-            danger: true,
-            onClick: () => {
-              setItemToDelete({ type: 'resource', id: record.id });
-              setDeleteModalVisible(true);
-            },
-          });
-        }
-
-        return (
-          <Dropdown menu={{ items: menuItems }} trigger={['click']} placement="bottomRight">
-            <Button type="text" icon={<MoreOutlined />} />
-          </Dropdown>
-        );
-      },
+      accessorKey: 'name',
+      header: 'Name',
     },
     {
-      title: 'Name',
-      dataIndex: 'name',
-      key: 'name',
+      accessorKey: 'slug',
+      header: 'Slug',
     },
     {
-      title: 'Slug',
-      dataIndex: 'slug',
-      key: 'slug',
+      accessorKey: 'description',
+      header: 'Description',
     },
     {
-      title: 'Description',
-      dataIndex: 'description',
-      key: 'description',
+      accessorKey: '_count.permissions',
+      header: 'Permissions',
+      cell: ({ row }) => <Badge variant="outline">{row.original._count?.permissions || 0}</Badge>,
+    },
+    {
+      id: 'actions',
+      cell: ({ row }) => (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" className="h-8 w-8 p-0">
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {canEdit && (
+              <DropdownMenuItem
+                onClick={() => {
+                  setSelectedItem(row.original);
+                  setDrawerVisible(true);
+                }}
+              >
+                <Pencil className="mr-2 h-4 w-4" />
+                Edit
+              </DropdownMenuItem>
+            )}
+            {canDelete && row.original._count?.permissions === 0 && (
+              <DropdownMenuItem
+                className="text-destructive"
+                onClick={() => {
+                  setItemToDelete(row.original);
+                  setDeleteDialogOpen(true);
+                }}
+              >
+                <Trash className="mr-2 h-4 w-4" />
+                Delete
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ),
     },
   ];
 
-  // Action columns
-  const actionColumns = [
+  const permissionColumns: ColumnDef<PermissionWithRelations>[] = [
     {
-      title: 'Actions',
-      key: 'actions',
-      width: 100,
-      render: (record: Action) => {
-        const menuItems: MenuProps['items'] = [];
-
-        if (canEditAction) {
-          menuItems.push({
-            key: 'edit',
-            label: 'Edit',
-            icon: <EditOutlined />,
-            onClick: () => {
-              setSelectedAction(record);
-              setActionDrawerVisible(true);
-            },
-          });
-        }
-
-        if (canDeleteAction) {
-          menuItems.push({
-            key: 'delete',
-            label: 'Delete',
-            icon: <DeleteOutlined />,
-            danger: true,
-            onClick: () => {
-              setItemToDelete({ type: 'action', id: record.id });
-              setDeleteModalVisible(true);
-            },
-          });
-        }
-
-        return (
-          <Dropdown menu={{ items: menuItems }} trigger={['click']} placement="bottomRight">
-            <Button type="text" icon={<MoreOutlined />} />
-          </Dropdown>
-        );
+      accessorKey: 'resource.name',
+      header: 'Resource',
+    },
+    {
+      accessorKey: 'target',
+      header: 'Target',
+      cell: ({ row }) => {
+        const target = row.original.target;
+        const targetData = row.original[target.toLowerCase() as keyof PermissionWithRelations] as
+          | { firstName: string | null; lastName: string | null }
+          | { name: string }
+          | null;
+        return targetData
+          ? 'firstName' in targetData
+            ? `${targetData.firstName} ${targetData.lastName}`
+            : targetData.name
+          : '-';
       },
     },
     {
-      title: 'Name',
-      dataIndex: 'name',
-      key: 'name',
-    },
-    {
-      title: 'Slug',
-      dataIndex: 'slug',
-      key: 'slug',
-    },
-    {
-      title: 'Description',
-      dataIndex: 'description',
-      key: 'description',
-    },
-  ];
-
-  const items: TabsProps['items'] = [
-    {
-      key: 'permissions',
-      label: (
-        <span>
-          <SafetyCertificateOutlined />
-          Permissions
-        </span>
-      ),
-      children: (
-        <DataGrid<PermissionWithRelations>
-          columns={permissionColumns}
-          dataSource={permissions}
-          loading={loading}
-          rowKey="id"
-          headerContent={
-            <div className="flex justify-between items-center mb-4">
-              <Title level={4}>Permissions</Title>
-              {canCreatePermission && (
-                <Button
-                  type="primary"
-                  icon={<PlusOutlined />}
-                  onClick={() => {
-                    setSelectedPermission(null);
-                    setPermissionDrawerVisible(true);
-                  }}
-                >
-                  Create Permission
-                </Button>
-              )}
-            </div>
-          }
-          onRowDoubleClick={
-            canEditPermission
-              ? (record) => {
-                  setSelectedPermission(record);
-                  setPermissionDrawerVisible(true);
-                }
-              : undefined
-          }
-        />
+      accessorKey: 'actions',
+      header: 'Actions',
+      cell: ({ row }) => (
+        <div className="flex gap-1">
+          {row.original.actions.map((action) => (
+            <Badge key={action.action.id} variant="outline">
+              {action.action.name}
+            </Badge>
+          ))}
+        </div>
       ),
     },
     {
-      key: 'resources',
-      label: (
-        <span>
-          <AppstoreOutlined />
-          Resources
-        </span>
-      ),
-      children: (
-        <DataGrid<Resource>
-          columns={resourceColumns}
-          dataSource={resources}
-          loading={loading}
-          rowKey="id"
-          headerContent={
-            <div className="flex justify-between items-center mb-4">
-              <Title level={4}>Resources</Title>
-              {canCreateResource && (
-                <Button
-                  type="primary"
-                  icon={<PlusOutlined />}
-                  onClick={() => {
-                    setSelectedResource(null);
-                    setResourceDrawerVisible(true);
-                  }}
-                >
-                  Create Resource
-                </Button>
-              )}
-            </div>
-          }
-          onRowDoubleClick={
-            canEditResource
-              ? (record) => {
-                  setSelectedResource(record);
-                  setResourceDrawerVisible(true);
-                }
-              : undefined
-          }
-        />
-      ),
-    },
-    {
-      key: 'actions',
-      label: (
-        <span>
-          <ThunderboltOutlined />
-          Actions
-        </span>
-      ),
-      children: (
-        <DataGrid<Action>
-          columns={actionColumns}
-          dataSource={actions}
-          loading={loading}
-          rowKey="id"
-          headerContent={
-            <div className="flex justify-between items-center mb-4">
-              <Title level={4}>Actions</Title>
-              {canCreateAction && (
-                <Button
-                  type="primary"
-                  icon={<PlusOutlined />}
-                  onClick={() => {
-                    setSelectedAction(null);
-                    setActionDrawerVisible(true);
-                  }}
-                >
-                  Create Action
-                </Button>
-              )}
-            </div>
-          }
-          onRowDoubleClick={
-            canEditAction
-              ? (record) => {
-                  setSelectedAction(record);
-                  setActionDrawerVisible(true);
-                }
-              : undefined
-          }
-        />
+      id: 'actions',
+      cell: ({ row }) => (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" className="h-8 w-8 p-0">
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {canEdit && (
+              <DropdownMenuItem
+                onClick={() => {
+                  setSelectedItem(row.original);
+                  setDrawerVisible(true);
+                }}
+              >
+                <Pencil className="mr-2 h-4 w-4" />
+                Edit
+              </DropdownMenuItem>
+            )}
+            {canDelete && (
+              <DropdownMenuItem
+                className="text-destructive"
+                onClick={() => {
+                  setItemToDelete(row.original);
+                  setDeleteDialogOpen(true);
+                }}
+              >
+                <Trash className="mr-2 h-4 w-4" />
+                Delete
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       ),
     },
   ];
@@ -511,66 +334,109 @@ export default function PermissionsPage() {
   return (
     <>
       <Card>
-        <Tabs activeKey={activeTab} items={items} onChange={setActiveTab} />
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+          <CardTitle>Permissions Management</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="permissions" className="flex items-center">
+                <Shield className="mr-2 h-4 w-4" />
+                Permissions
+              </TabsTrigger>
+              <TabsTrigger value="resources" className="flex items-center">
+                <Database className="mr-2 h-4 w-4" />
+                Resources
+              </TabsTrigger>
+              <TabsTrigger value="actions" className="flex items-center">
+                <Zap className="mr-2 h-4 w-4" />
+                Actions
+              </TabsTrigger>
+            </TabsList>
+
+            <div className="flex justify-end">
+              {canCreate && (
+                <Button
+                  onClick={() => {
+                    setSelectedItem(null);
+                    setDrawerVisible(true);
+                  }}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Create {activeTab.slice(0, -1)}
+                </Button>
+              )}
+            </div>
+
+            <TabsContent value="permissions" className="m-0">
+              <DataGrid columns={permissionColumns} data={permissions} loading={loading} />
+            </TabsContent>
+
+            <TabsContent value="resources" className="m-0">
+              <DataGrid columns={resourceColumns} data={resources} loading={loading} />
+            </TabsContent>
+
+            <TabsContent value="actions" className="m-0">
+              <DataGrid columns={actionColumns} data={actions} loading={loading} />
+            </TabsContent>
+          </Tabs>
+        </CardContent>
       </Card>
 
-      {/* Permission Drawer */}
-      <Drawer
-        title={`${selectedPermission ? 'Edit' : 'Create'} Permission`}
-        width={720}
-        open={permissionDrawerVisible}
-        onClose={closeDrawers}
-      >
-        <PermissionForm
-          initialValues={selectedPermission}
-          onSubmit={handleSubmit}
-          loading={formLoading}
-        />
-      </Drawer>
+      <Sheet open={drawerVisible} onOpenChange={setDrawerVisible}>
+        <SheetContent className="sm:max-w-2xl">
+          <SheetHeader>
+            <SheetTitle>
+              {selectedItem ? `Edit ${activeTab.slice(0, -1)}` : `Create ${activeTab.slice(0, -1)}`}
+            </SheetTitle>
+          </SheetHeader>
+          <div className="mt-8">
+            {activeTab === 'permissions' && (
+              <PermissionForm
+                initialValues={selectedItem}
+                onSubmit={handleSubmit}
+                loading={formLoading}
+              />
+            )}
+            {activeTab === 'resources' && (
+              <ResourceForm
+                initialValues={selectedItem}
+                onSubmit={handleSubmit}
+                loading={formLoading}
+              />
+            )}
+            {activeTab === 'actions' && (
+              <ActionForm
+                initialValues={selectedItem}
+                onSubmit={handleSubmit}
+                loading={formLoading}
+              />
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
 
-      {/* Resource Drawer */}
-      <Drawer
-        title={`${selectedResource ? 'Edit' : 'Create'} Resource`}
-        width={720}
-        open={resourceDrawerVisible}
-        onClose={closeDrawers}
-      >
-        <ResourceForm
-          initialValues={selectedResource}
-          onSubmit={handleSubmit}
-          loading={formLoading}
-        />
-      </Drawer>
-
-      {/* Action Drawer */}
-      <Drawer
-        title={`${selectedAction ? 'Edit' : 'Create'} Action`}
-        width={720}
-        open={actionDrawerVisible}
-        onClose={closeDrawers}
-      >
-        <ActionForm initialValues={selectedAction} onSubmit={handleSubmit} loading={formLoading} />
-      </Drawer>
-
-      {/* Delete Modal */}
-      <Modal
-        title={`Delete ${itemToDelete?.type}`}
-        open={deleteModalVisible}
-        onOk={handleDelete}
-        onCancel={() => {
-          setDeleteModalVisible(false);
-          setItemToDelete(null);
-        }}
-        okText="Delete"
-        okButtonProps={{
-          danger: true,
-          loading: loading,
-        }}
-      >
-        <p>
-          Are you sure you want to delete this {itemToDelete?.type}? This action cannot be undone.
-        </p>
-      </Modal>
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete this{' '}
+              {activeTab.slice(0, -1)}.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleDelete}
+              disabled={formLoading}
+            >
+              {formLoading ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

@@ -1,10 +1,33 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Form, Input, Button, Select, Switch, Divider, Space } from 'antd';
 import { Role, Organization } from '@prisma/client';
 import { useSession } from 'next-auth/react';
 import { getRequest } from '@/lib/apiClient';
+import { Button } from '@/components/ui/button';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+  FormDescription,
+} from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
+import { Separator } from '@/components/ui/separator';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm } from 'react-hook-form';
+import * as z from 'zod';
 
 interface RoleFormProps {
   initialValues?: Role | null;
@@ -12,23 +35,29 @@ interface RoleFormProps {
   loading?: boolean;
 }
 
+const formSchema = z.object({
+  name: z.string().min(3, 'Role name must be at least 3 characters'),
+  description: z.string().max(500, 'Description cannot be longer than 500 characters').optional(),
+  organizationId: z.string().optional().nullable(),
+  isDefault: z.boolean().default(false),
+});
+
+type FormValues = z.infer<typeof formSchema>;
+
 export function RoleForm({ initialValues, onSubmit, loading }: RoleFormProps) {
-  const [form] = Form.useForm();
   const { data: session } = useSession();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [loadingOrgs, setLoadingOrgs] = useState(false);
 
-  useEffect(() => {
-    form.resetFields();
-    if (initialValues) {
-      form.setFieldsValue({
-        name: initialValues.name,
-        description: initialValues.description,
-        isDefault: initialValues.isDefault,
-        organizationId: initialValues.organizationId,
-      });
-    }
-  }, [form, initialValues]);
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      name: initialValues?.name || '',
+      description: initialValues?.description || '',
+      organizationId: initialValues?.organizationId || null,
+      isDefault: initialValues?.isDefault || false,
+    },
+  });
 
   useEffect(() => {
     fetchOrganizations();
@@ -46,78 +75,105 @@ export function RoleForm({ initialValues, onSubmit, loading }: RoleFormProps) {
     }
   };
 
-  const handleSubmit = async (values: any) => {
+  const handleSubmit = async (values: FormValues) => {
     try {
       await onSubmit(values);
-      form.resetFields();
+      form.reset();
     } catch (error) {
       console.error(error);
     }
   };
 
   return (
-    <Form
-      form={form}
-      layout="vertical"
-      onFinish={handleSubmit}
-      initialValues={{
-        isDefault: false,
-      }}
-    >
-      <Form.Item
-        name="name"
-        label="Role Name"
-        rules={[
-          { required: true, message: 'Please enter role name' },
-          { min: 3, message: 'Role name must be at least 3 characters' },
-        ]}
-      >
-        <Input placeholder="Enter role name" />
-      </Form.Item>
-
-      <Form.Item
-        name="description"
-        label="Description"
-        rules={[{ max: 500, message: 'Description cannot be longer than 500 characters' }]}
-      >
-        <Input.TextArea placeholder="Enter role description" rows={4} showCount maxLength={500} />
-      </Form.Item>
-
-      <Form.Item
-        name="organizationId"
-        label="Organization"
-        help="Leave empty to create a global role"
-      >
-        <Select
-          placeholder="Select organization"
-          allowClear
-          loading={loadingOrgs}
-          options={organizations.map((org) => ({
-            label: org.name,
-            value: org.id,
-          }))}
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
+        <FormField
+          control={form.control}
+          name="name"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Role Name</FormLabel>
+              <FormControl>
+                <Input placeholder="Enter role name" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
         />
-      </Form.Item>
 
-      <Form.Item
-        name="isDefault"
-        label="Default Role"
-        valuePropName="checked"
-        help="Default roles are automatically assigned to new members"
-      >
-        <Switch />
-      </Form.Item>
+        <FormField
+          control={form.control}
+          name="description"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Description</FormLabel>
+              <FormControl>
+                <Textarea placeholder="Enter role description" className="resize-none" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
-      <Divider />
+        <FormField
+          control={form.control}
+          name="organizationId"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Organization</FormLabel>
+              <Select
+                onValueChange={field.onChange}
+                value={field.value || undefined}
+                disabled={loadingOrgs}
+              >
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select organization" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {organizations.map((org) => (
+                    <SelectItem key={org.id} value={org.id}>
+                      {org.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormDescription>Leave empty to create a global role</FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
-      <Form.Item className="mb-0">
-        <Space className="w-full justify-end">
-          <Button onClick={() => form.resetFields()}>Reset</Button>
-          <Button type="primary" htmlType="submit" loading={loading}>
-            {initialValues ? 'Update' : 'Create'} Role
+        <FormField
+          control={form.control}
+          name="isDefault"
+          render={({ field }) => (
+            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+              <div className="space-y-0.5">
+                <FormLabel className="text-base">Default Role</FormLabel>
+                <FormDescription>
+                  Default roles are automatically assigned to new members
+                </FormDescription>
+              </div>
+              <FormControl>
+                <Switch checked={field.value} onCheckedChange={field.onChange} />
+              </FormControl>
+            </FormItem>
+          )}
+        />
+
+        <Separator />
+
+        <div className="flex justify-end space-x-4">
+          <Button type="button" variant="outline" onClick={() => form.reset()}>
+            Reset
           </Button>
-        </Space>
-      </Form.Item>
+          <Button type="submit" disabled={loading}>
+            {loading ? 'Saving...' : initialValues ? 'Update Role' : 'Create Role'}
+          </Button>
+        </div>
+      </form>
     </Form>
   );
 }

@@ -4,22 +4,42 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 import Link from 'next/link';
-import { Form, Input, Button } from 'antd';
-import { MailOutlined, LockOutlined } from '@ant-design/icons';
 import { useNotification } from '@/contexts/NotificationContext';
+import { Button } from '@/components/ui/button';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm } from 'react-hook-form';
+import * as z from 'zod';
 
-type FormValues = {
-  email: string;
-  password: string;
-};
+const formSchema = z.object({
+  email: z.string().email('Invalid email address'),
+  password: z.string().min(1, 'Password is required'),
+});
+
+type FormValues = z.infer<typeof formSchema>;
 
 export default function LoginForm() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
-  const [form] = Form.useForm();
   const { showNotification } = useNotification();
 
-  const onFinish = async (values: FormValues) => {
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      email: '',
+      password: '',
+    },
+  });
+
+  const onSubmit = async (values: FormValues) => {
     setLoading(true);
     try {
       const result = await signIn('credentials', {
@@ -29,55 +49,72 @@ export default function LoginForm() {
       });
 
       if (result?.error) {
-        showNotification('error', 'Login Failed', 'Invalid email or password');
+        showNotification({
+          type: 'error',
+          message: 'Login Failed',
+          description: 'Invalid email or password',
+        });
         return;
       }
 
-      showNotification('success', 'Success', 'Login successful');
+      showNotification({
+        type: 'default',
+        message: 'Success',
+        description: 'Login successful',
+      });
       router.push('/');
     } catch (error) {
-      showNotification(
-        'error',
-        'Error',
-        error instanceof Error ? error.message : 'An error occurred during login'
-      );
+      showNotification({
+        type: 'error',
+        message: 'Error',
+        description: error instanceof Error ? error.message : 'An error occurred during login',
+      });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Form form={form} name="login" onFinish={onFinish} layout="vertical" requiredMark={false}>
-      <Form.Item
-        name="email"
-        label="Email"
-        rules={[
-          { required: true, message: 'Please input your email!' },
-          { type: 'email', message: 'Please enter a valid email!' },
-        ]}
-      >
-        <Input prefix={<MailOutlined />} placeholder="Email" />
-      </Form.Item>
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <FormField
+          control={form.control}
+          name="email"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Email</FormLabel>
+              <FormControl>
+                <Input placeholder="Enter your email" {...field} type="email" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
-      <Form.Item
-        name="password"
-        label="Password"
-        rules={[{ required: true, message: 'Please input your password!' }]}
-      >
-        <Input.Password prefix={<LockOutlined />} placeholder="Password" />
-      </Form.Item>
+        <FormField
+          control={form.control}
+          name="password"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Password</FormLabel>
+              <FormControl>
+                <Input placeholder="Enter your password" {...field} type="password" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
-      <Form.Item>
-        <Button type="primary" htmlType="submit" loading={loading} block>
-          Sign In
+        <Button type="submit" className="w-full" disabled={loading}>
+          {loading ? 'Signing in...' : 'Sign In'}
         </Button>
-      </Form.Item>
 
-      <div className="text-center">
-        <Link href="/auth/register" className="text-blue-600 hover:text-blue-700">
-          Don&apos;t have an account? Sign up
-        </Link>
-      </div>
+        <div className="text-center">
+          <Link href="/auth/register" className="text-sm text-primary hover:underline">
+            Don&apos;t have an account? Sign up
+          </Link>
+        </div>
+      </form>
     </Form>
   );
 }

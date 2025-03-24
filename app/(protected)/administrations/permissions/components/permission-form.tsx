@@ -1,9 +1,37 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Form, Select, Button, Space } from 'antd';
 import { Permission, Resource, Action, PermissionTarget } from '@prisma/client';
 import { getRequest } from '@/lib/apiClient';
+import { Button } from '@/components/ui/button';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+} from '@/components/ui/command';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Check } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm } from 'react-hook-form';
+import * as z from 'zod';
 
 interface User {
   id: string;
@@ -23,24 +51,34 @@ interface Organization {
   name: string;
 }
 
-interface PermissionWithRelations extends Permission {
-  resource: Resource;
-  actions: {
-    action: Action;
+interface PermissionWithActions extends Permission {
+  actions?: {
+    action: {
+      id: string;
+      name: string;
+      slug: string;
+    };
   }[];
-  user?: User | null;
-  role?: Role | null;
-  organization?: Organization | null;
 }
 
 interface PermissionFormProps {
-  initialValues?: PermissionWithRelations | null;
+  initialValues?: PermissionWithActions | null;
   onSubmit: (values: any) => Promise<void>;
   loading?: boolean;
 }
 
+const formSchema = z.object({
+  resourceId: z.string().min(1, 'Resource is required'),
+  target: z.enum(['USER', 'ROLE', 'ORGANIZATION']),
+  userId: z.string().optional(),
+  roleId: z.string().optional(),
+  organizationId: z.string().optional(),
+  actionIds: z.array(z.string()).min(1, 'At least one action is required'),
+});
+
+type FormData = z.infer<typeof formSchema>;
+
 export function PermissionForm({ initialValues, onSubmit, loading }: PermissionFormProps) {
-  const [form] = Form.useForm();
   const [targetType, setTargetType] = useState<PermissionTarget | null>(null);
   const [loadingData, setLoadingData] = useState(true);
   const [formData, setFormData] = useState<{
@@ -57,24 +95,21 @@ export function PermissionForm({ initialValues, onSubmit, loading }: PermissionF
     organizations: [],
   });
 
+  const form = useForm<FormData>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      resourceId: initialValues?.resourceId || '',
+      target: initialValues?.target || 'USER',
+      userId: initialValues?.userId || undefined,
+      roleId: initialValues?.roleId || undefined,
+      organizationId: initialValues?.organizationId || undefined,
+      actionIds: initialValues?.actions?.map((pa) => pa.action.id) || [],
+    },
+  });
+
   useEffect(() => {
     fetchFormData();
   }, []);
-
-  useEffect(() => {
-    form.resetFields();
-    if (initialValues) {
-      form.setFieldsValue({
-        resourceId: initialValues.resourceId,
-        target: initialValues.target,
-        userId: initialValues.user?.id,
-        roleId: initialValues.role?.id,
-        organizationId: initialValues.organization?.id,
-        actionIds: initialValues.actions?.map((pa) => pa.action.id),
-      });
-      setTargetType(initialValues.target);
-    }
-  }, [form, initialValues]);
 
   const fetchFormData = async () => {
     setLoadingData(true);
@@ -101,143 +136,216 @@ export function PermissionForm({ initialValues, onSubmit, loading }: PermissionF
     }
   };
 
-  const handleSubmit = async (values: any) => {
-    try {
-      await onSubmit(values);
-      form.resetFields();
-      setTargetType(null);
-    } catch (error) {
-      console.error('Error submitting form:', error);
-    }
-  };
-
-  const handleTargetTypeChange = (value: PermissionTarget) => {
-    setTargetType(value);
-    form.setFieldsValue({
-      userId: undefined,
-      roleId: undefined,
-      organizationId: undefined,
-    });
+  const handleSubmit = async (values: FormData) => {
+    await onSubmit(values);
   };
 
   return (
-    <Form form={form} layout="vertical" onFinish={handleSubmit} disabled={loadingData}>
-      <Form.Item
-        name="resourceId"
-        label="Resource"
-        rules={[{ required: true, message: 'Please select a resource' }]}
-      >
-        <Select
-          placeholder="Select resource"
-          loading={loadingData}
-          options={formData.resources.map((resource) => ({
-            label: `${resource.name} (${resource.slug})`,
-            value: resource.id,
-          }))}
-          showSearch
-          optionFilterProp="label"
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
+        <FormField
+          control={form.control}
+          name="resourceId"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Resource</FormLabel>
+              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a resource" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {formData.resources.map((resource) => (
+                    <SelectItem key={resource.id} value={resource.id}>
+                      {resource.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
         />
-      </Form.Item>
 
-      <Form.Item
-        name="target"
-        label="Target Type"
-        rules={[{ required: true, message: 'Please select a target type' }]}
-      >
-        <Select
-          placeholder="Select target type"
-          onChange={handleTargetTypeChange}
-          options={[
-            { label: 'User', value: 'USER' },
-            { label: 'Role', value: 'ROLE' },
-            { label: 'Organization', value: 'ORGANIZATION' },
-          ]}
+        <FormField
+          control={form.control}
+          name="target"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Target Type</FormLabel>
+              <Select
+                onValueChange={(value) => {
+                  field.onChange(value);
+                  setTargetType(value as PermissionTarget);
+                }}
+                defaultValue={field.value}
+              >
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select target type" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="USER">User</SelectItem>
+                  <SelectItem value="ROLE">Role</SelectItem>
+                  <SelectItem value="ORGANIZATION">Organization</SelectItem>
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
         />
-      </Form.Item>
 
-      {targetType === 'USER' && (
-        <Form.Item
-          name="userId"
-          label="User"
-          rules={[{ required: true, message: 'Please select a user' }]}
-        >
-          <Select
-            placeholder="Select user"
-            loading={loadingData}
-            options={formData.users.map((user) => ({
-              label: `${user.firstName} ${user.lastName} (${user.email})`,
-              value: user.id,
-            }))}
-            showSearch
-            optionFilterProp="label"
+        {targetType === 'USER' && (
+          <FormField
+            control={form.control}
+            name="userId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>User</FormLabel>
+                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a user" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {formData.users.map((user) => (
+                      <SelectItem key={user.id} value={user.id}>
+                        {user.firstName} {user.lastName} ({user.email})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
           />
-        </Form.Item>
-      )}
+        )}
 
-      {targetType === 'ROLE' && (
-        <Form.Item
-          name="roleId"
-          label="Role"
-          rules={[{ required: true, message: 'Please select a role' }]}
-        >
-          <Select
-            placeholder="Select role"
-            loading={loadingData}
-            options={formData.roles.map((role) => ({
-              label: `${role.name}${role.organizationId ? ' (Organization Role)' : ' (Global Role)'}`,
-              value: role.id,
-            }))}
-            showSearch
-            optionFilterProp="label"
+        {targetType === 'ROLE' && (
+          <FormField
+            control={form.control}
+            name="roleId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Role</FormLabel>
+                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a role" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {formData.roles.map((role) => (
+                      <SelectItem key={role.id} value={role.id}>
+                        {role.name}
+                        {role.organizationId ? ' (Organization Role)' : ' (Global Role)'}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
           />
-        </Form.Item>
-      )}
+        )}
 
-      {targetType === 'ORGANIZATION' && (
-        <Form.Item
-          name="organizationId"
-          label="Organization"
-          rules={[{ required: true, message: 'Please select an organization' }]}
-        >
-          <Select
-            placeholder="Select organization"
-            loading={loadingData}
-            options={formData.organizations.map((org) => ({
-              label: org.name,
-              value: org.id,
-            }))}
-            showSearch
-            optionFilterProp="label"
+        {targetType === 'ORGANIZATION' && (
+          <FormField
+            control={form.control}
+            name="organizationId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Organization</FormLabel>
+                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select an organization" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {formData.organizations.map((org) => (
+                      <SelectItem key={org.id} value={org.id}>
+                        {org.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
           />
-        </Form.Item>
-      )}
+        )}
 
-      <Form.Item
-        name="actionIds"
-        label="Actions"
-        rules={[{ required: true, message: 'Please select at least one action' }]}
-      >
-        <Select
-          placeholder="Select actions"
-          mode="multiple"
-          loading={loadingData}
-          options={formData.actions.map((action) => ({
-            label: `${action.name} (${action.slug})`,
-            value: action.id,
-          }))}
-          showSearch
-          optionFilterProp="label"
+        <FormField
+          control={form.control}
+          name="actionIds"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Actions</FormLabel>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <FormControl>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        'w-full justify-start text-left font-normal',
+                        !field.value.length && 'text-muted-foreground'
+                      )}
+                    >
+                      {field.value.length > 0
+                        ? formData.actions
+                            .filter((action) => field.value.includes(action.id))
+                            .map((action) => action.name)
+                            .join(', ')
+                        : 'Select actions'}
+                    </Button>
+                  </FormControl>
+                </PopoverTrigger>
+                <PopoverContent className="w-[400px] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Search actions..." />
+                    <CommandEmpty>No actions found.</CommandEmpty>
+                    <CommandGroup className="max-h-[300px] overflow-auto">
+                      {formData.actions.map((action) => (
+                        <CommandItem
+                          key={action.id}
+                          onSelect={() => {
+                            const newValue = field.value.includes(action.id)
+                              ? field.value.filter((id) => id !== action.id)
+                              : [...field.value, action.id];
+                            field.onChange(newValue);
+                          }}
+                        >
+                          <Check
+                            className={cn(
+                              'mr-2 h-4 w-4',
+                              field.value.includes(action.id) ? 'opacity-100' : 'opacity-0'
+                            )}
+                          />
+                          {action.name} ({action.slug})
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              <FormMessage />
+            </FormItem>
+          )}
         />
-      </Form.Item>
 
-      <Form.Item className="mb-0">
-        <Space className="w-full justify-end">
-          <Button onClick={() => form.resetFields()}>Reset</Button>
-          <Button type="primary" htmlType="submit" loading={loading}>
-            {initialValues ? 'Update' : 'Create'} Permission
+        <div className="flex justify-end space-x-4">
+          <Button type="button" variant="outline" onClick={() => form.reset()} disabled={loading}>
+            Reset
           </Button>
-        </Space>
-      </Form.Item>
+          <Button type="submit" disabled={loading}>
+            {loading ? 'Saving...' : initialValues ? 'Update' : 'Create'} Permission
+          </Button>
+        </div>
+      </form>
     </Form>
   );
 }

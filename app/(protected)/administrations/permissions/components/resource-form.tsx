@@ -1,8 +1,22 @@
 'use client';
 
 import { useEffect } from 'react';
-import { Form, Input, Button, Space } from 'antd';
 import { Resource } from '@prisma/client';
+import { Button } from '@/components/ui/button';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+  FormDescription,
+} from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm } from 'react-hook-form';
+import * as z from 'zod';
 
 interface ResourceFormProps {
   initialValues?: Resource | null;
@@ -10,59 +24,93 @@ interface ResourceFormProps {
   loading?: boolean;
 }
 
-export function ResourceForm({ initialValues, onSubmit, loading }: ResourceFormProps) {
-  const [form] = Form.useForm();
+const formSchema = z.object({
+  name: z.string().min(3, 'Resource name must be at least 3 characters'),
+  slug: z
+    .string()
+    .min(1, 'Slug is required')
+    .regex(/^[a-z0-9-]+$/, 'Slug can only contain lowercase letters, numbers, and hyphens'),
+  description: z.string().optional(),
+});
 
-  useEffect(() => {
-    form.resetFields();
-    if (initialValues) {
-      form.setFieldsValue({
-        name: initialValues.name,
-        slug: initialValues.slug,
-        description: initialValues.description,
-      });
-    }
-  }, [form, initialValues]);
+type FormData = z.infer<typeof formSchema>;
+
+export function ResourceForm({ initialValues, onSubmit, loading }: ResourceFormProps) {
+  const form = useForm<FormData>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      name: initialValues?.name || '',
+      slug: initialValues?.slug || '',
+      description: initialValues?.description || '',
+    },
+  });
+
+  const handleSubmit = async (values: FormData) => {
+    await onSubmit(values);
+  };
 
   return (
-    <Form form={form} layout="vertical" onFinish={onSubmit}>
-      <Form.Item
-        name="name"
-        label="Resource Name"
-        rules={[
-          { required: true, message: 'Please enter resource name' },
-          { min: 3, message: 'Resource name must be at least 3 characters' },
-        ]}
-      >
-        <Input placeholder="Enter resource name (e.g., USER, PRODUCT)" />
-      </Form.Item>
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
+        <FormField
+          control={form.control}
+          name="name"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Resource Name</FormLabel>
+              <FormControl>
+                <Input placeholder="Enter resource name (e.g., User, Role)" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
-      <Form.Item
-        name="slug"
-        label="Slug"
-        rules={[
-          { required: true, message: 'Please enter slug' },
-          {
-            pattern: /^[a-z0-9-]+$/,
-            message: 'Slug can only contain lowercase letters, numbers, and hyphens',
-          },
-        ]}
-      >
-        <Input placeholder="Enter slug (e.g., user, product)" />
-      </Form.Item>
+        <FormField
+          control={form.control}
+          name="slug"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Slug</FormLabel>
+              <FormControl>
+                <Input placeholder="Enter slug (e.g., user, role)" {...field} />
+              </FormControl>
+              <FormDescription>
+                Used as a unique identifier for the resource. Only lowercase letters, numbers, and
+                hyphens are allowed.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
-      <Form.Item name="description" label="Description">
-        <Input.TextArea rows={4} placeholder="Enter resource description" />
-      </Form.Item>
+        <FormField
+          control={form.control}
+          name="description"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Description</FormLabel>
+              <FormControl>
+                <Textarea
+                  placeholder="Enter resource description"
+                  className="resize-none"
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
-      <Form.Item className="mb-0">
-        <Space className="w-full justify-end">
-          <Button onClick={() => form.resetFields()}>Reset</Button>
-          <Button type="primary" htmlType="submit" loading={loading}>
-            {initialValues ? 'Update' : 'Create'} Resource
+        <div className="flex justify-end space-x-4">
+          <Button type="button" variant="outline" onClick={() => form.reset()} disabled={loading}>
+            Reset
           </Button>
-        </Space>
-      </Form.Item>
+          <Button type="submit" disabled={loading}>
+            {loading ? 'Saving...' : initialValues ? 'Update' : 'Create'} Resource
+          </Button>
+        </div>
+      </form>
     </Form>
   );
 }

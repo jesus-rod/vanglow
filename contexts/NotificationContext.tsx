@@ -1,35 +1,36 @@
 'use client';
 
 import { createContext, useContext } from 'react';
-import { notification } from 'antd';
-import { NotificationInstance } from 'antd/es/notification/interface';
+import { useToast } from '@/hooks/use-toast';
 import { ShowNotificationFunction } from '@/lib/apiClient/types/types';
 
 interface NotificationContextType {
   showNotification: ShowNotificationFunction;
-  notificationApi: NotificationInstance;
 }
 
-const NotificationContext = createContext<NotificationContextType | null>(null);
+const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
 
-export const NotificationProvider = ({ children }: { children: React.ReactNode }) => {
-  const [notificationApi, contextHolder] = notification.useNotification();
+export function NotificationProvider({ children }: { children: React.ReactNode }) {
+  const { toast } = useToast();
 
-  const showNotification: ShowNotificationFunction = (type, message, description) => {
-    notificationApi[type]({
-      message,
-      description,
-      placement: 'topRight',
+  const showNotification: ShowNotificationFunction = ({
+    type = 'default',
+    message,
+    description,
+  }) => {
+    toast({
+      variant: type === 'error' ? 'destructive' : 'default',
+      title: message,
+      description: description,
     });
   };
 
   return (
-    <NotificationContext.Provider value={{ showNotification, notificationApi }}>
-      {contextHolder}
+    <NotificationContext.Provider value={{ showNotification }}>
       {children}
     </NotificationContext.Provider>
   );
-};
+}
 
 export const useNotification = () => {
   const context = useContext(NotificationContext);

@@ -3,32 +3,58 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Form, Input, Button } from 'antd';
-import { UserOutlined, LockOutlined, PhoneOutlined, MailOutlined } from '@ant-design/icons';
 import { signIn } from 'next-auth/react';
 import { postRequest } from '@/lib/apiClient';
 import { useNotification } from '@/contexts/NotificationContext';
+import { Button } from '@/components/ui/button';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm } from 'react-hook-form';
+import * as z from 'zod';
 
-type FormValues = {
-  email: string;
-  password: string;
-  firstName?: string;
-  lastName?: string;
-  phone?: string;
-};
+const formSchema = z.object({
+  email: z.string().email('Invalid email address'),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+  firstName: z.string().min(1, 'First name is required'),
+  lastName: z.string().min(1, 'Last name is required'),
+  phone: z.string().optional(),
+});
+
+type FormValues = z.infer<typeof formSchema>;
 
 export default function RegisterForm() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
-  const [form] = Form.useForm();
   const { showNotification } = useNotification();
 
-  const onFinish = async (values: FormValues) => {
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      email: '',
+      password: '',
+      firstName: '',
+      lastName: '',
+      phone: '',
+    },
+  });
+
+  const onSubmit = async (values: FormValues) => {
     setLoading(true);
     try {
       await postRequest('/api/auth/register', values);
-
-      showNotification('success', 'Success', 'Account created successfully');
+      showNotification({
+        type: 'default',
+        message: 'Success',
+        description: 'Account created successfully',
+      });
 
       // Auto login after successful registration
       const result = await signIn('credentials', {
@@ -38,71 +64,112 @@ export default function RegisterForm() {
       });
 
       if (result?.error) {
-        showNotification('error', 'Login Failed', 'Account created but automatic login failed');
+        showNotification({
+          type: 'error',
+          message: 'Login Failed',
+          description: 'Account created but automatic login failed',
+        });
         return;
       }
 
       router.push('/');
     } catch (error) {
-      showNotification(
-        'error',
-        'Registration Failed',
-        error instanceof Error ? error.message : 'Failed to create account'
-      );
+      showNotification({
+        type: 'error',
+        message: 'Error',
+        description:
+          error instanceof Error ? error.message : 'An error occurred during registration',
+      });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Form form={form} name="register" onFinish={onFinish} layout="vertical" requiredMark={false}>
-      <div className="grid grid-cols-2 gap-4">
-        <Form.Item name="firstName" label="First Name">
-          <Input prefix={<UserOutlined />} placeholder="First Name" />
-        </Form.Item>
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          <FormField
+            control={form.control}
+            name="firstName"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>First Name</FormLabel>
+                <FormControl>
+                  <Input placeholder="First Name" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
-        <Form.Item name="lastName" label="Last Name">
-          <Input prefix={<UserOutlined />} placeholder="Last Name" />
-        </Form.Item>
-      </div>
+          <FormField
+            control={form.control}
+            name="lastName"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Last Name</FormLabel>
+                <FormControl>
+                  <Input placeholder="Last Name" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
 
-      <Form.Item
-        name="email"
-        label="Email"
-        rules={[
-          { required: true, message: 'Please input your email!' },
-          { type: 'email', message: 'Please enter a valid email!' },
-        ]}
-      >
-        <Input prefix={<MailOutlined />} placeholder="Email" />
-      </Form.Item>
+        <FormField
+          control={form.control}
+          name="email"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Email</FormLabel>
+              <FormControl>
+                <Input placeholder="Email" type="email" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
-      <Form.Item
-        name="password"
-        label="Password"
-        rules={[
-          { required: true, message: 'Please input your password!' },
-          { min: 8, message: 'Password must be at least 8 characters!' },
-        ]}
-      >
-        <Input.Password prefix={<LockOutlined />} placeholder="Password" />
-      </Form.Item>
+        <FormField
+          control={form.control}
+          name="password"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Password</FormLabel>
+              <FormControl>
+                <Input placeholder="Password" type="password" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
-      <Form.Item name="phone" label="Phone Number">
-        <Input prefix={<PhoneOutlined />} placeholder="Phone Number" />
-      </Form.Item>
+        <FormField
+          control={form.control}
+          name="phone"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Phone Number</FormLabel>
+              <FormControl>
+                <Input placeholder="Phone Number" type="tel" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
-      <Form.Item>
-        <Button type="primary" htmlType="submit" loading={loading} block>
-          Create Account
+        <Button type="submit" className="w-full" disabled={loading}>
+          {loading ? 'Creating Account...' : 'Create Account'}
         </Button>
-      </Form.Item>
 
-      <div className="text-center">
-        <Link href="/auth/login" className="text-blue-600 hover:text-blue-700">
-          Already have an account? Sign in
-        </Link>
-      </div>
+        <div className="text-center">
+          <Link href="/auth/login" className="text-sm text-primary hover:underline">
+            Already have an account? Sign in
+          </Link>
+        </div>
+      </form>
     </Form>
   );
 }

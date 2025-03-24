@@ -1,16 +1,34 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Card, Button, Tag, Typography, Dropdown, MenuProps, Drawer, Modal } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined, MoreOutlined } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
 import { usePermission } from '@/lib/auth/permissions';
 import { DataGrid } from '@/core/components/datagrid';
 import { Role, Organization } from '@prisma/client';
 import { RoleForm } from './components/role-form';
 import { getRequest, postRequest, putRequest, deleteRequest } from '@/lib/apiClient';
-
-const { Title } = Typography;
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Badge } from '@/components/ui/badge';
+import { MoreHorizontal, Plus, Pencil, Trash, Building2 } from 'lucide-react';
+import { ColumnDef } from '@tanstack/react-table';
 
 interface RoleWithRelations extends Role {
   organization?: {
@@ -29,9 +47,8 @@ export default function RolesPage() {
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [selectedRole, setSelectedRole] = useState<RoleWithRelations | null>(null);
   const [formLoading, setFormLoading] = useState(false);
-  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [roleToDelete, setRoleToDelete] = useState<RoleWithRelations | null>(null);
-  const router = useRouter();
 
   // Permission hooks
   const canCreate = usePermission('role', 'create');
@@ -55,14 +72,16 @@ export default function RolesPage() {
 
   const handleDelete = async () => {
     if (!roleToDelete) return;
-
+    setFormLoading(true);
     try {
       await deleteRequest(`/administrations/roles/${roleToDelete.id}`);
-      setDeleteModalVisible(false);
+      setDeleteDialogOpen(false);
       setRoleToDelete(null);
       fetchRoles();
     } catch (error) {
       console.error(error);
+    } finally {
+      setFormLoading(false);
     }
   };
 
@@ -89,140 +108,153 @@ export default function RolesPage() {
     }
   };
 
-  const columns = [
+  const columns: ColumnDef<RoleWithRelations>[] = [
     {
-      title: 'Actions',
-      key: 'actions',
-      width: 100,
-      render: (text: string, record: RoleWithRelations) => {
-        const items: MenuProps['items'] = [
-          {
-            key: 'edit',
-            icon: <EditOutlined />,
-            label: 'Edit',
-            disabled: !canEdit,
-            onClick: () => {
-              setSelectedRole(record);
-              setDrawerVisible(true);
-            },
-          },
-          {
-            key: 'delete',
-            icon: <DeleteOutlined />,
-            label: 'Delete',
-            disabled: !canDelete,
-            danger: true,
-            onClick: () => {
-              setRoleToDelete(record);
-              setDeleteModalVisible(true);
-            },
-          },
-        ];
-
-        return (
-          <Dropdown menu={{ items }} trigger={['click']} placement="bottomRight">
-            <Button type="text" icon={<MoreOutlined />} />
-          </Dropdown>
+      accessorKey: 'name',
+      header: 'Name',
+    },
+    {
+      accessorKey: 'description',
+      header: 'Description',
+    },
+    {
+      accessorKey: 'organization',
+      header: 'Organization',
+      cell: ({ row }) => {
+        const org = row.original.organization;
+        return org ? (
+          <div className="flex items-center gap-2">
+            <Building2 className="h-4 w-4 text-muted-foreground" />
+            <span>{org.name}</span>
+          </div>
+        ) : (
+          <Badge variant="secondary">Global</Badge>
         );
       },
     },
     {
-      title: 'Name',
-      dataIndex: 'name',
-      key: 'name',
-      sorter: (a: RoleWithRelations, b: RoleWithRelations) => a.name.localeCompare(b.name),
+      accessorKey: 'isDefault',
+      header: 'Default',
+      cell: ({ row }) => {
+        return row.original.isDefault ? <Badge>Default</Badge> : null;
+      },
     },
     {
-      title: 'Description',
-      dataIndex: 'description',
-      key: 'description',
-      ellipsis: true,
+      accessorKey: '_count.userRoles',
+      header: 'Users',
+      cell: ({ row }) => {
+        return <Badge variant="outline">{row.original._count?.userRoles || 0}</Badge>;
+      },
     },
     {
-      title: 'Organization',
-      key: 'organization',
-      render: (text: string, record: RoleWithRelations) => record.organization?.name || 'Global',
-    },
-    {
-      title: 'Default',
-      dataIndex: 'isDefault',
-      key: 'isDefault',
-      render: (isDefault: boolean) => (isDefault ? <Tag color="blue">Default</Tag> : null),
-    },
-    {
-      title: 'Users',
-      key: 'userRoles',
-      render: (text: string, record: RoleWithRelations) => record._count?.userRoles || 0,
+      id: 'actions',
+      cell: ({ row }) => {
+        const role = row.original;
+
+        return (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="h-8 w-8 p-0">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {canEdit && (
+                <DropdownMenuItem
+                  onClick={() => {
+                    setSelectedRole(role);
+                    setDrawerVisible(true);
+                  }}
+                >
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Edit
+                </DropdownMenuItem>
+              )}
+              {canDelete && (
+                <DropdownMenuItem
+                  className="text-destructive"
+                  onClick={() => {
+                    setRoleToDelete(role);
+                    setDeleteDialogOpen(true);
+                  }}
+                >
+                  <Trash className="mr-2 h-4 w-4" />
+                  Delete
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        );
+      },
     },
   ];
 
   return (
-    <div className="p-8">
+    <>
       <Card>
-        <div className="flex justify-between items-center mb-4">
-          <Title level={3} className="!mb-0">
-            Roles
-          </Title>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+          <CardTitle>Roles</CardTitle>
           {canCreate && (
             <Button
-              type="primary"
-              icon={<PlusOutlined />}
               onClick={() => {
                 setSelectedRole(null);
                 setDrawerVisible(true);
               }}
             >
+              <Plus className="mr-2 h-4 w-4" />
               Create Role
             </Button>
           )}
-        </div>
-
-        <DataGrid<RoleWithRelations>
-          columns={columns}
-          dataSource={roles}
-          loading={loading}
-          rowKey="id"
-          onRowDoubleClick={
-            canEdit
-              ? (record) => {
-                  setSelectedRole(record);
-                  setDrawerVisible(true);
-                }
-              : undefined
-          }
-        />
+        </CardHeader>
+        <CardContent>
+          <DataGrid<RoleWithRelations>
+            columns={columns}
+            data={roles}
+            loading={loading}
+            onRowDoubleClick={
+              canEdit
+                ? (record) => {
+                    setSelectedRole(record);
+                    setDrawerVisible(true);
+                  }
+                : undefined
+            }
+          />
+        </CardContent>
       </Card>
 
-      <Drawer
-        title={`${selectedRole ? 'Edit' : 'Create'} Role`}
-        width={720}
-        onClose={() => {
-          setDrawerVisible(false);
-          setSelectedRole(null);
-        }}
-        open={drawerVisible}
-        style={{ paddingBottom: 80 }}
-      >
-        <RoleForm initialValues={selectedRole} onSubmit={handleSubmit} loading={formLoading} />
-      </Drawer>
+      <Sheet open={drawerVisible} onOpenChange={setDrawerVisible}>
+        <SheetContent className="sm:max-w-2xl">
+          <SheetHeader>
+            <SheetTitle>{selectedRole ? 'Edit Role' : 'Create Role'}</SheetTitle>
+          </SheetHeader>
+          <div className="mt-8">
+            <RoleForm initialValues={selectedRole} onSubmit={handleSubmit} loading={formLoading} />
+          </div>
+        </SheetContent>
+      </Sheet>
 
-      <Modal
-        title="Delete Role"
-        open={deleteModalVisible}
-        onOk={handleDelete}
-        onCancel={() => {
-          setDeleteModalVisible(false);
-          setRoleToDelete(null);
-        }}
-        okText="Delete"
-        okButtonProps={{
-          danger: true,
-          loading: formLoading,
-        }}
-      >
-        <p>Are you sure you want to delete this role?</p>
-        <p>This action cannot be undone.</p>
-      </Modal>
-    </div>
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the role and remove it from
+              all users.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleDelete}
+              disabled={formLoading}
+            >
+              {formLoading ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

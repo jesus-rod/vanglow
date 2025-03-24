@@ -1,17 +1,15 @@
 'use client';
 
-import { Layout, Button, Dropdown, Avatar, theme } from 'antd';
+import { Button } from '@/components/ui/button';
 import {
-  MenuFoldOutlined,
-  MenuUnfoldOutlined,
-  UserOutlined,
-  LogoutOutlined,
-  BulbOutlined,
-} from '@ant-design/icons';
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Menu, Moon, Sun, User, LogOut } from 'lucide-react';
 import { useSession, signOut } from 'next-auth/react';
 import { useTheme } from '@/app/providers';
-
-const { Header } = Layout;
 
 interface NavbarProps {
   collapsed: boolean;
@@ -20,47 +18,38 @@ interface NavbarProps {
 
 export default function Navbar({ collapsed, setCollapsed }: NavbarProps) {
   const { data: session } = useSession();
-  const { isDark, toggleTheme } = useTheme();
-  const { token } = theme.useToken();
-
-  const userMenuItems = [
-    {
-      key: 'logout',
-      icon: <LogoutOutlined />,
-      label: 'Log Out',
-      onClick: () => signOut(),
-    },
-  ];
+  const { theme, setTheme } = useTheme();
 
   return (
-    <Header
-      style={{
-        padding: '0 24px',
-        background: token.colorBgContainer,
-        margin: '0 16px',
-        borderRadius: '8px',
-      }}
-    >
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          height: '100%',
-        }}
-      >
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+    <header className="border-b">
+      <div className="flex h-16 items-center px-4 justify-between">
+        <div className="flex gap-2">
+          <Button variant="ghost" size="icon" onClick={() => setCollapsed(!collapsed)}>
+            <Menu className="h-5 w-5" />
+          </Button>
           <Button
-            type="text"
-            icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-            onClick={() => setCollapsed(!collapsed)}
-          />
-          <Button type="text" icon={<BulbOutlined />} onClick={toggleTheme} />
+            variant="ghost"
+            size="icon"
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          >
+            {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+          </Button>
         </div>
-        <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
-          <Avatar style={{ cursor: 'pointer' }} icon={<UserOutlined />} />
-        </Dropdown>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon">
+              <User className="h-5 w-5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => signOut()}>
+              <LogOut className="mr-2 h-4 w-4" />
+              <span>Log Out</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
-    </Header>
+    </header>
   );
 }

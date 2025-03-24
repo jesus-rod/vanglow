@@ -1,9 +1,30 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Drawer, Form, Select, Button } from 'antd';
 import { Organization, User } from '@prisma/client';
 import { getRequest, postRequest } from '@/lib/apiClient';
+import { Button } from '@/components/ui/button';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+} from '@/components/ui/command';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Check } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm } from 'react-hook-form';
+import * as z from 'zod';
 
 interface AddUsersDrawerProps {
   organization: Organization | null;
@@ -11,82 +32,114 @@ interface AddUsersDrawerProps {
   onClose: () => void;
 }
 
+const formSchema = z.object({
+  userIds: z.array(z.string()).min(1, 'Please select at least one user'),
+});
+
+type FormData = z.infer<typeof formSchema>;
+
 export function AddUsersDrawer({ organization, open, onClose }: AddUsersDrawerProps) {
-  const [form] = Form.useForm();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+
+  const form = useForm<FormData>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      userIds: [],
+    },
+  });
 
   useEffect(() => {
     if (open) {
-      fetchAvailableUsers();
+      fetchUsers();
     }
   }, [open]);
 
-  const fetchAvailableUsers = async () => {
+  const fetchUsers = async () => {
     try {
-      const data = await getRequest('/administrations/users/available');
+      const data = await getRequest<User[]>('/administrations/users');
       setUsers(data);
     } catch (error) {
-      console.error('Failed to fetch users:', error);
+      console.error(error);
     }
   };
 
-  const handleSubmit = async (values: { userIds: string[] }) => {
+  const handleSubmit = async (values: FormData) => {
     if (!organization) return;
-
+    setLoading(true);
     try {
-      setLoading(true);
-      const result = await postRequest(
-        `/administrations/organizations/${organization.id}/add-users`,
-        { userIds: values.userIds }
-      );
-      form.resetFields();
+      await postRequest(`/administrations/organizations/${organization.id}/users`, {
+        userIds: values.userIds,
+      });
       onClose();
-      return result;
+      form.reset();
     } catch (error) {
-      console.error('Failed to add users:', error);
+      console.error(error);
     } finally {
       setLoading(false);
     }
   };
 
-  if (!organization) return null;
-
   return (
-    <Drawer
-      title={`Add Users to ${organization.name}`}
-      placement="right"
-      onClose={onClose}
-      open={open}
-      width={720}
-    >
-      <Form form={form} layout="vertical" onFinish={handleSubmit}>
-        <Form.Item
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
+        <FormField
+          control={form.control}
           name="userIds"
-          label="Select Users"
-          rules={[{ required: true, message: 'Please select users' }]}
-        >
-          <Select
-            mode="multiple"
-            placeholder="Select users to add"
-            style={{ width: '100%' }}
-            optionFilterProp="children"
-            loading={!users.length}
-          >
-            {users.map((user) => (
-              <Select.Option key={user.id} value={user.id}>
-                {user.firstName} {user.lastName} ({user.email})
-              </Select.Option>
-            ))}
-          </Select>
-        </Form.Item>
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Users</FormLabel>
+              <FormControl>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start text-left font-normal"
+                    >
+                      {field.value.length > 0
+                        ? `${field.value.length} users selected`
+                        : 'Select users'}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[400px] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search users..." />
+                      <CommandEmpty>No users found.</CommandEmpty>
+                      <CommandGroup className="max-h-[300px] overflow-auto">
+                        {users.map((user) => (
+                          <CommandItem
+                            key={user.id}
+                            onSelect={() => {
+                              const newValue = field.value.includes(user.id)
+                                ? field.value.filter((id) => id !== user.id)
+                                : [...field.value, user.id];
+                              field.onChange(newValue);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                'mr-2 h-4 w-4',
+                                field.value.includes(user.id) ? 'opacity-100' : 'opacity-0'
+                              )}
+                            />
+                            {user.firstName} {user.lastName} ({user.email})
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
-        <Form.Item>
-          <Button type="primary" htmlType="submit" loading={loading} block>
-            Add Users
-          </Button>
-        </Form.Item>
-      </Form>
-    </Drawer>
+        <Button type="submit" disabled={loading} className="w-full">
+          {loading ? 'Adding Users...' : 'Add Users'}
+        </Button>
+      </form>
+    </Form>
   );
 }

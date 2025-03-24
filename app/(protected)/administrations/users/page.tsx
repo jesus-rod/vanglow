@@ -1,33 +1,43 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Card, Button, Tag, Typography, Dropdown, MenuProps, Drawer, Modal } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined, MoreOutlined } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
 import { usePermission } from '@/lib/auth/permissions';
 import { DataGrid } from '@/core/components/datagrid';
 import { UserForm } from './components/user-form';
 import { User, UserStatus } from '@prisma/client';
 import { getRequest, postRequest, putRequest, deleteRequest } from '@/lib/apiClient';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Badge } from '@/components/ui/badge';
+import { MoreHorizontal, Plus, Pencil, Trash } from 'lucide-react';
+import { ColumnDef } from '@tanstack/react-table';
 
-const { Title } = Typography;
-
-// Role Type Definition
-type Role = {
-  id: string;
-  name: string;
-  description: string;
-};
-
-// UserRole Type Definition
-type UserRole = {
-  role: Role;
-};
-
-// User Type Definition (without password)
-type UserWithoutPassword = Omit<User, 'password'> & {
-  userRoles?: UserRole[];
-};
+interface UserWithoutPassword extends Omit<User, 'password'> {
+  userRoles?: {
+    role: {
+      id: string;
+      name: string;
+    };
+  }[];
+}
 
 export default function UsersPage() {
   const [users, setUsers] = useState<UserWithoutPassword[]>([]);
@@ -35,14 +45,15 @@ export default function UsersPage() {
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserWithoutPassword | null>(null);
   const [formLoading, setFormLoading] = useState(false);
-  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<UserWithoutPassword | null>(null);
-  const router = useRouter();
 
   // Permission hooks
   const canCreate = usePermission('user', 'create');
   const canEdit = usePermission('user', 'edit');
   const canDelete = usePermission('user', 'delete');
+
+  const router = useRouter();
 
   useEffect(() => {
     fetchUsers();
@@ -64,7 +75,7 @@ export default function UsersPage() {
 
     try {
       await deleteRequest(`/administrations/users/${userToDelete.id}`);
-      setDeleteModalVisible(false);
+      setDeleteDialogOpen(false);
       setUserToDelete(null);
       fetchUsers();
     } catch (error) {
@@ -95,174 +106,146 @@ export default function UsersPage() {
     }
   };
 
-  const columns = [
+  const columns: ColumnDef<UserWithoutPassword>[] = [
     {
-      title: 'Actions',
-      key: 'actions',
-      width: 100,
-      render: (record: UserWithoutPassword) => {
-        const menuItems: MenuProps['items'] = [];
-
-        if (canEdit) {
-          menuItems.push({
-            key: 'edit',
-            label: 'Edit',
-            icon: <EditOutlined />,
-            onClick: () => {
-              setSelectedUser(record);
-              setDrawerVisible(true);
-            },
-          });
-        }
-
-        if (canDelete) {
-          menuItems.push({
-            key: 'delete',
-            label: 'Delete',
-            icon: <DeleteOutlined />,
-            danger: true,
-            onClick: () => {
-              setUserToDelete(record);
-              setDeleteModalVisible(true);
-            },
-          });
-        }
-
-        return (
-          <Dropdown menu={{ items: menuItems }} trigger={['click']} placement="bottomRight">
-            <Button type="text" icon={<MoreOutlined />} />
-          </Dropdown>
-        );
+      accessorKey: 'email',
+      header: 'Email',
+    },
+    {
+      accessorKey: 'firstName',
+      header: 'First Name',
+    },
+    {
+      accessorKey: 'lastName',
+      header: 'Last Name',
+    },
+    {
+      accessorKey: 'status',
+      header: 'Status',
+      cell: ({ row }) => {
+        const status = row.getValue('status') as UserStatus;
+        return <Badge variant={status === 'ACTIVE' ? 'default' : 'destructive'}>{status}</Badge>;
       },
     },
     {
-      title: 'Name',
-      key: 'name',
-      render: (record: UserWithoutPassword) => (
-        <span>
-          {record.firstName && record.lastName
-            ? `${record.firstName} ${record.lastName}`
-            : record.email}
-        </span>
-      ),
-    },
-    {
-      title: 'Email',
-      dataIndex: 'email',
-      key: 'email',
-    },
-    {
-      title: 'Roles',
-      key: 'roles',
-      render: (record: UserWithoutPassword) => (
-        <>
-          {record.userRoles && record.userRoles.length > 0 ? (
-            record.userRoles.map((userRole, index) => (
-              <Tag 
-                key={index} 
-                color={userRole.role.name === 'ADMIN' ? 'blue' : 'green'}
-                style={{ marginRight: 4, marginBottom: 4 }}
-              >
-                {userRole.role.name}
-              </Tag>
-            ))
-          ) : (
-            <Tag>No Role</Tag>
-          )}
-        </>
-      ),
-    },
-    {
-      title: 'Status',
-      dataIndex: 'status',
-      key: 'status',
-      render: (status: UserStatus) => (
-        <Tag color={status === 'ACTIVE' ? 'green' : 'red'}>{status}</Tag>
-      ),
+      id: 'actions',
+      cell: ({ row }) => {
+        const user = row.original;
+
+        return (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="h-8 w-8 p-0">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {canEdit && (
+                <DropdownMenuItem
+                  onClick={() => {
+                    setSelectedUser(user);
+                    setDrawerVisible(true);
+                  }}
+                >
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Edit
+                </DropdownMenuItem>
+              )}
+              {canDelete && (
+                <DropdownMenuItem
+                  className="text-destructive"
+                  onClick={() => {
+                    setUserToDelete(user);
+                    setDeleteDialogOpen(true);
+                  }}
+                >
+                  <Trash className="mr-2 h-4 w-4" />
+                  Delete
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        );
+      },
     },
   ];
-
-  const headerContent = (
-    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 24 }}>
-      <Title level={2}>Users</Title>
-      {canCreate && (
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={() => {
-            setSelectedUser(null);
-            setDrawerVisible(true);
-          }}
-        >
-          Create User
-        </Button>
-      )}
-    </div>
-  );
 
   return (
     <>
       <Card>
-        <DataGrid<UserWithoutPassword>
-          columns={columns}
-          dataSource={users}
-          rowKey="id"
-          loading={loading}
-          headerContent={headerContent}
-          onRowDoubleClick={
-            canEdit
-              ? (record) => {
-                  setSelectedUser(record);
-                  setDrawerVisible(true);
-                }
-              : undefined
-          }
-        />
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+          <CardTitle>Users</CardTitle>
+          {canCreate && (
+            <Button
+              onClick={() => {
+                setSelectedUser(null);
+                setDrawerVisible(true);
+              }}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Create User
+            </Button>
+          )}
+        </CardHeader>
+        <CardContent>
+          <DataGrid<UserWithoutPassword>
+            columns={columns}
+            data={users}
+            loading={loading}
+            onRowDoubleClick={
+              canEdit
+                ? (record) => {
+                    setSelectedUser(record);
+                    setDrawerVisible(true);
+                  }
+                : undefined
+            }
+          />
+        </CardContent>
       </Card>
 
-      <Drawer
-        title={selectedUser ? 'Edit User' : 'Create User'}
-        open={drawerVisible}
-        onClose={() => {
-          setDrawerVisible(false);
-          setSelectedUser(null);
-        }}
-        width={720}
-      >
-        <UserForm
-          initialValues={selectedUser ? {
-            ...selectedUser,
-            userRoles: selectedUser.userRoles
-          } : undefined}
-          onSubmit={handleSubmit}
-          loading={formLoading}
-        />
-      </Drawer>
+      <Sheet open={drawerVisible} onOpenChange={setDrawerVisible}>
+        <SheetContent className="sm:max-w-2xl">
+          <SheetHeader>
+            <SheetTitle>{selectedUser ? 'Edit User' : 'Create User'}</SheetTitle>
+          </SheetHeader>
+          <div className="mt-8">
+            <UserForm
+              initialValues={
+                selectedUser
+                  ? {
+                      ...selectedUser,
+                      userRoles: selectedUser.userRoles,
+                    }
+                  : undefined
+              }
+              onSubmit={handleSubmit}
+              loading={formLoading}
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
 
-      <Modal
-        title="Delete User"
-        open={deleteModalVisible}
-        onOk={handleDelete}
-        onCancel={() => {
-          setDeleteModalVisible(false);
-          setUserToDelete(null);
-        }}
-        okText="Delete"
-        cancelText="Cancel"
-        okButtonProps={{ danger: true }}
-        centered
-      >
-        <p>Are you sure you want to delete this user?</p>
-        {userToDelete && (
-          <p>
-            <strong>
-              {userToDelete.firstName && userToDelete.lastName
-                ? `${userToDelete.firstName} ${userToDelete.lastName}`
-                : userToDelete.email}
-            </strong>
-          </p>
-        )}
-      </Modal>
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the user.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleDelete}
+              disabled={formLoading}
+            >
+              {formLoading ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
